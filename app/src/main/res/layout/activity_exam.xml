@@ -92,7 +92,7 @@
             android:id="@+id/btnAcknowledge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="KEMBALI KE UJIAN & MATIKAN ALARM"
+            android:text="KEMBALI KE UJIAN &amp; MATIKAN ALARM"
             android:backgroundTint="#FFFFFF"
             android:textColor="#B71C1C"
             android:textStyle="bold" />
