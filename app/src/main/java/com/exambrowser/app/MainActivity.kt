@@ -1,9 +1,11 @@
 package com.exambrowser.app
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -21,6 +23,7 @@ class MainActivity : AppCompatActivity() {
         etUrl = findViewById(R.id.etUrl)
         val btnMulai: Button = findViewById(R.id.btnMulai)
         val btnScanQr: Button = findViewById(R.id.btnScanQr)
+        val tvCopyright: TextView = findViewById(R.id.tvCopyright)
 
         val prefs = getSharedPreferences("exam_prefs", MODE_PRIVATE)
         etUrl.setText(prefs.getString("last_url", ""))
@@ -40,6 +43,15 @@ class MainActivity : AppCompatActivity() {
 
         btnScanQr.setOnClickListener {
             mulaiScanQr()
+        }
+
+        tvCopyright.setOnClickListener {
+            try {
+                val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/6285647018388"))
+                startActivity(waIntent)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Tidak dapat membuka WhatsApp", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
