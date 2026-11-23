@@ -1,7 +1,9 @@
 package com.exambrowser.app
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.AlertDialog
+import android.content.Context
 import android.content.res.Configuration
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -10,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -22,6 +25,7 @@ import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -57,7 +61,6 @@ class ExamActivity : AppCompatActivity() {
         }
     }
 
-    // Jeda singkat saat onPause agar popup autofill email / dialog tidak langsung membunyikan alarm
     private val pendingPauseAlarmRunnable = Runnable {
         if (!sedangKeluarAtauScan && !isFinishing && !hasWindowFocus()) {
             picuAlarmPelanggaran("Aplikasi keluar atau berpindah layar saat ujian!")
@@ -68,7 +71,6 @@ class ExamActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Pastikan alarm bersih setiap kali masuk halaman ujian
         hentikanAlarmJikaAda()
 
         // Blokir screenshot & screen record
@@ -81,12 +83,10 @@ class ExamActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContentView(R.layout.activity_exam)
+        pasangListenerImmersive()
         sembunyikanSystemBars()
-
-        // Aktifkan Lock Task Mode (Screen Pinning) jika didukung
-        try {
-            startLockTask()
-        } catch (_: Exception) {}
+        blokirTombolBack()
+        aktifkanLockTaskAman()
 
         webView = findViewById(R.id.webView)
         val btnKeluar: Button = findViewById(R.id.btnKeluar)
@@ -106,6 +106,47 @@ class ExamActivity : AppCompatActivity() {
         }
     }
 
+    private fun blokirTombolBack() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                Toast.makeText(
+                    this@ExamActivity,
+                    "Tombol Back dikunci selama ujian. Gunakan tombol Keluar.",
+                    Toast.LENGTH_SHORT
+                ).show()
+                sembunyikanSystemBars()
+            }
+        })
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            Toast.makeText(
+                this,
+                "Tombol Back dikunci selama ujian. Gunakan tombol Keluar.",
+                Toast.LENGTH_SHORT
+            ).show()
+            sembunyikanSystemBars()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    private fun aktifkanLockTaskAman() {
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val isLocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+            } else {
+                @Suppress("DEPRECATION")
+                am.isInLockTaskMode
+            }
+            if (!isLocked) {
+                startLockTask()
+            }
+        } catch (_: Exception) {}
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         webView.settings.apply {
@@ -117,7 +158,6 @@ class ExamActivity : AppCompatActivity() {
             setSupportZoom(true)
             builtInZoomControls = true
             displayZoomControls = false
-            userAgentString = "$userAgentString ExamBrowserSMKN1Trucuk/1.0"
         }
 
         webView.webChromeClient = WebChromeClient()
@@ -128,13 +168,42 @@ class ExamActivity : AppCompatActivity() {
             ): Boolean {
                 return false
             }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                sembunyikanSystemBars()
+            }
+        }
+    }
+
+    private fun pasangListenerImmersive() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.setOnApplyWindowInsetsListener { v, insets ->
+                val result = v.onApplyWindowInsets(insets)
+                val isImeVisible = insets.isVisible(WindowInsets.Type.ime())
+                if (!isImeVisible) {
+                    mainHandler.post { sembunyikanSystemBars() }
+                }
+                result
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
+                if ((visibility and View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                    mainHandler.post { sembunyikanSystemBars() }
+                }
+            }
         }
     }
 
     private fun sembunyikanSystemBars() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.insetsController?.let { controller ->
-                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                controller.hide(
+                    WindowInsets.Type.statusBars()
+                        or WindowInsets.Type.navigationBars()
+                        or WindowInsets.Type.captionBar()
+                )
                 controller.systemBarsBehavior =
                     WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
@@ -144,6 +213,9 @@ class ExamActivity : AppCompatActivity() {
                 View.SYSTEM_UI_FLAG_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 )
         }
     }
@@ -305,6 +377,7 @@ class ExamActivity : AppCompatActivity() {
         super.onResume()
         mainHandler.removeCallbacks(pendingPauseAlarmRunnable)
         sembunyikanSystemBars()
+        aktifkanLockTaskAman()
     }
 
     override fun onDestroy() {
